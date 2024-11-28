@@ -1,0 +1,165 @@
+<!-- Neon Animated Blogs Card Template -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Blog Cards Template, Adya</title>
+    <style>
+        /* CSS Styling */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #121212;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            gap: 2rem;
+            padding: 2rem;
+            perspective: 1000px;
+        }
+
+        .blog-card {
+            width: 350px;
+            background-color: #000000;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            transition: all 0.3s ease;
+            transform-style: preserve-3d;
+            box-shadow: -2.5px 7px 21px 1.5px #00eeffe1;
+            margin: 11px;
+        }
+
+        .blog-card-inner {
+            position: relative;
+            z-index: 1;
+            background-color: #1e1e1e;
+            border: none;
+            border-radius: 14px;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+
+        .card-image {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+            transition: transform 0.3s ease, filter 0.3s ease;
+        }
+
+        .card-title {
+            color: #00ffff;
+            font-size: 1.4rem;
+            margin: 1rem;
+            font-weight: 600;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            transition: text-shadow 0.3s ease, transform 0.3s ease, color 0.3s ease;
+        }
+
+        .card-description {
+            color: #cccccc;
+            font-size: 1rem;
+            margin: 1rem;
+            transition: color 0.3s ease;
+        }
+
+        .card-link {
+            display: inline-block;
+            padding: 0.55rem 1rem;
+            background-color: #00ffff;
+            color: #121212;
+            text-decoration: none;
+            border-radius: 50px;
+            transition: all 0.3s ease;
+            margin: 1rem;
+        }
+
+        /* Hover effects */
+        .blog-card:hover {
+            transform: rotateY(25deg) scale(1.05);
+            box-shadow: -2.5px 10px 21px 1.5px #ff00ffe1;
+        }
+
+        .blog-card:hover .card-image {
+            filter: hue-rotate(110deg);
+            transform: scale(1.05);
+        }
+
+        .blog-card:hover .card-title {
+            color: #ff00ff;
+            text-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+        }
+
+        .blog-card:hover .card-link {
+            background-color: #ff00ff;
+        }
+
+        .card-title:hover {
+            transform: translateY(-9px);
+            /* Title moves up */
+        }
+
+        .card-link:hover {
+            transform: translateY(-12px);
+            /* Button moves up */
+            box-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
+        }
+
+
+        .blog-card:active {
+            transform: scale(0.95) rotateY(25deg);
+        }
+
+        /* make style reponsive */
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+                perspective: 500px;
+            }
+        }
+
+        /* End of CSS Styling     */
+    </style>
+</head>
+
+<body>
+    <!-- HTML body structure  -->
+    <div class="blog-card">
+        <div class="blog-card-inner">
+            <img src="https://www.quantzi.co/images/Frame-1597884900.webp" alt="Blog Post Image" class="card-image">
+            <div class="card-content">
+                <h2 class="card-title">Don't Under Estimate the Power of HTML & CSS</h2>
+                <p class="card-description">
+                    Did you know that HTML and CSS can do more than just structure and style a webpage? can create
+                    stunning designs and bring ideas to life with simplicity...
+                </p>
+                <a href="#" class="card-link">Read More</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="blog-card">
+        <div class="blog-card-inner">
+            <img src="https://azikya.com/wp-content/uploads/2024/05/psd-to-html.jpg" alt="Developing-HTML-AI-Image"
+                class="card-image">
+            <div class="card-content">
+                <h2 class="card-title">Ever Think to Develop a AI with HTML & CSS</h2>
+                <p class="card-description">
+                    Can HTML and CSS contribute to the world of AI Development? Absolutely! together both craft user
+                    interfaces that redefine experiences and personalization...
+                </p>
+                <a href="#" class="card-link">Read More</a>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

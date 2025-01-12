@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LED Screen Simulation by Adya</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a1a1a;
+        }
+
+        #screen {
+            width: 600px;
+            height: 600px;
+            background-color: #000;
+            display: grid;
+            grid-template-columns: repeat(20, 1fr);
+            gap: 2px;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .led {
+            width: 100%;
+            height: 100%;
+            background-color: #333;
+            border-radius: 50%;
+            transition: background-color 0.3s;
+        }
+
+        .led.active {
+            background-color: #ff9100;
+            box-shadow: 0 0 5px #df7f03;
+        }
+
+        #controls {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #444;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #666;
+            transform: scale(1.05);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button onclick="showSmiley()">Show Smiley</button>
+        <button onclick="showHeart()">Show Heart</button>
+        <button onclick="clearDisplay()">Clear</button>
+    </div>
+    <div id="screen"></div>
+    
+
+    <script>
+        const GRID_SIZE = 20;
+        const screen = document.getElementById('screen');
+
+        // Create LED grid
+        for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+            const led = document.createElement('div');
+            led.className = 'led';
+            screen.appendChild(led);
+        }
+
+        const leds = document.querySelectorAll('.led');
+
+        // Pattern definitions (1 for on, 0 for off)
+        const smileyPattern = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,0],
+            [0,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,0],
+            [0,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,0],
+            [0,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,0],
+            [0,1,1,1,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,0,0,1,1,1,1,1,1,1,1,0,0,1,1,1,0],
+            [0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0],
+            [0,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        ];
+
+        const heartPattern = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,1,1,0,0,0,0,0,0,0,0,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,0,0,0,0,0,0,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        ];
+
+        function displayPattern(pattern) {
+            leds.forEach((led, index) => {
+                const row = Math.floor(index / GRID_SIZE);
+                const col = index % GRID_SIZE;
+                if (pattern[row][col]) {
+                    led.classList.add('active');
+                } else {
+                    led.classList.remove('active');
+                }
+            });
+        }
+
+        function showSmiley() {
+            displayPattern(smileyPattern);
+        }
+
+        function showHeart() {
+            displayPattern(heartPattern);
+        }
+
+        function clearDisplay() {
+            leds.forEach(led => led.classList.remove('active'));
+        }
+    </script>
+
+</body>
+</html>
+<!-- follow: https://github.com/Adya-Prasad/adya-social-serving-assets/new/main/HTML-CSS-JS -->

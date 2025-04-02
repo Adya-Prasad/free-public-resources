@@ -1,0 +1,18 @@
+{
+  "pull_request": {
+    "number": 1,
+    "title": "Demo PR,Fixed #36282 for better workflows",
+    "user": {
+      "login": "testuser"
+    },
+    "head": {
+      "sha": "dummysha"
+    }
+  },
+  "repository": {
+    "name": "django",
+    "owner": {
+      "login": "Adya-Prasad"
+    }
+  }
+}

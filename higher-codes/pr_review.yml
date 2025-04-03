@@ -1,19 +1,20 @@
+---
 name: PR Review
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths-ignore:
-      - 'docs/releases/**'  # Ignore release notes updates for most checks
-  workflow_dispatch:
+      - 'docs/releases/**'
+  workflow_dispatch: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
 
 permissions:
   contents: read
-  pull-requests: write  # Needed to add comments and labels to PRs
+  pull-requests: write
 
 jobs:
   # Reuse CI results instead of duplicating checks
@@ -32,24 +33,26 @@ jobs:
               owner, repo, pull_number: number
             });
             const sha = pull.data.head.sha;
-            
             const checkRuns = await github.rest.checks.listForRef({
               owner, repo, ref: sha
             });
-            
-            const relevantWorkflows = checkRuns.data.check_runs.filter(run => 
-              (run.name.includes('Tests') || run.name.includes('Linters') || 
-               run.name.includes('flake8') || run.name.includes('isort') || 
-               run.name.includes('black') || run.name.includes('JavaScript tests')) && 
-              run.status === 'completed'
+            const relevantWorkflows = checkRuns.data.check_runs.filter(
+              run =>
+                (run.name.includes('Tests') ||
+                 run.name.includes('Linters') ||
+                 run.name.includes('flake8') ||
+                 run.name.includes('isort') ||
+                 run.name.includes('black') ||
+                 run.name.includes('JavaScript tests')) &&
+                run.status === 'completed'
             );
-            
             if (relevantWorkflows.length === 0) {
               core.setOutput('status', 'pending');
               return { status: 'pending' };
             }
-            
-            const allPassing = relevantWorkflows.every(run => run.conclusion === 'success');
+            const allPassing = relevantWorkflows.every(
+              run => run.conclusion === 'success'
+            );
             const status = allPassing ? 'success' : 'failure';
             core.setOutput('status', status);
             return { status };
@@ -70,29 +73,35 @@ jobs:
         with:
           script: |
             const { owner, repo, number } = context.issue;
-            
             const files = await github.rest.pulls.listFiles({
               owner, repo, pull_number: number
             });
-            
-            const pythonFiles = files.data
-              .filter(file => file.filename.endsWith('.py'))
-              .filter(file => !file.filename.includes('/tests/') && !file.filename.includes('test_'));
-              
-            const testFiles = files.data
-              .filter(file => file.filename.endsWith('.py'))
-              .filter(file => file.filename.includes('/tests/') || file.filename.includes('test_'));
-            
-            const hasTests = testFiles.length > 0 || pythonFiles.length === 0;
+            const pythonFiles = files.data.filter(
+              file => file.filename.endsWith('.py')
+            ).filter(
+              file =>
+                !file.filename.includes('/tests/') &&
+                !file.filename.includes('test_')
+            );
+            const testFiles = files.data.filter(
+              file => file.filename.endsWith('.py')
+            ).filter(
+              file =>
+                file.filename.includes('/tests/') ||
+                file.filename.includes('test_')
+            );
+            const hasTests = testFiles.length > 0 ||
+                             pythonFiles.length === 0;
             core.setOutput('has_tests', hasTests ? 'true' : 'false');
-            
             if (pythonFiles.length > 0 && !hasTests) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: number,
-                body: `⚠️ **Test Coverage Check**\nThis PR modifies Python code but doesn't appear to include any test files. Please consider adding tests to cover your changes.`
+                body: "⚠️ **Test Coverage Check**\n" +
+                      "This PR modifies Python code but doesn't appear " +
+                      "to include any test files. Please consider adding tests " +
+                      "to cover your changes."
               });
             }
-            
             return { has_tests: hasTests };
 
   # Documentation checks - combined into a single job for efficiency
@@ -106,44 +115,48 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
-
+          python-version: "3.13"
       - name: Check for version notes
         id: check-version-notes
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
+            const fs = require("fs");
             const { owner, repo, number } = context.issue;
-            
             const files = await github.rest.pulls.listFiles({
               owner, repo, pull_number: number
             });
-            
-            const djangoFiles = files.data
-              .filter(file => file.filename.endsWith('.py'))
-              .filter(file => file.filename.startsWith('django/') && 
-                      !file.filename.includes('tests/'));
-            
+            const djangoFiles = files.data.filter(
+              file => file.filename.endsWith(".py")
+            ).filter(
+              file =>
+                file.filename.startsWith("django/") &&
+                !file.filename.includes("tests/")
+            );
             let needsVersionNotes = djangoFiles.length > 0;
             let hasVersionNotes = false;
-            
-            // Check for version notes in modified files or documentation
             if (needsVersionNotes) {
               for (const file of djangoFiles.concat(
-                files.data
-                  .filter(file => file.filename.endsWith('.txt') || file.filename.endsWith('.rst'))
-                  .filter(file => file.filename.startsWith('docs/'))
+                files.data.filter(
+                  file =>
+                    file.filename.endsWith(".txt") ||
+                    file.filename.endsWith(".rst")
+                ).filter(
+                  file => file.filename.startsWith("docs/")
+                )
               )) {
                 try {
                   if (fs.existsSync(file.filename)) {
-                    const fileContent = fs.readFileSync(file.filename, 'utf8');
-                    if (fileContent.includes('.. versionadded::') || 
-                        fileContent.includes('.. versionchanged::')) {
+                    const fileContent = fs.readFileSync(
+                      file.filename, "utf8"
+                    );
+                    if (
+                      fileContent.includes(".. versionadded::") ||
+                      fileContent.includes(".. versionchanged::")
+                    ) {
                       hasVersionNotes = true;
                       break;
                     }
@@ -153,16 +166,18 @@ jobs:
                 }
               }
             }
-            
-            core.setOutput('has_version_notes', hasVersionNotes ? 'true' : 'false');
-            
+            core.setOutput("has_version_notes", 
+              hasVersionNotes ? "true" : "false");
             if (needsVersionNotes && !hasVersionNotes) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: number,
-                body: `⚠️ **Version Notes Check**\nThis PR modifies Django core files but doesn't appear to include version notes (\`.. versionadded::\` or \`.. versionchanged::\`). Please add appropriate version notes in docstrings or documentation files.`
+                body: "⚠️ **Version Notes Check**\n" +
+                      "This PR modifies Django core files but doesn't appear " +
+                      "to include version notes (`.. versionadded::` or " +
+                      "`.. versionchanged::`). Please add appropriate version " +
+                      "notes in docstrings or documentation files."
               });
             }
-            
             return { has_version_notes: hasVersionNotes };
 
       - name: Check documentation formatting and deprecation
@@ -170,57 +185,61 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
+            const fs = require("fs");
             const { owner, repo, number } = context.issue;
-            
             const files = await github.rest.pulls.listFiles({
               owner, repo, pull_number: number
             });
-            
-            // Doc line length check
-            const docFiles = files.data.filter(file => 
-              (file.filename.endsWith('.txt') || file.filename.endsWith('.rst')) &&
-              file.filename.startsWith('docs/')
+            const docFiles = files.data.filter(
+              file =>
+                (file.filename.endsWith(".txt") ||
+                 file.filename.endsWith(".rst")) &&
+                file.filename.startsWith("docs/")
             );
-            
             let lineLengthValid = true;
             let invalidFiles = [];
-            
             for (const file of docFiles) {
               try {
                 if (fs.existsSync(file.filename)) {
-                  const fileContent = fs.readFileSync(file.filename, 'utf8');
-                  const lines = fileContent.split('\n');
-                  const longLines = lines
-                    .map((line, idx) => line.length > 80 ? idx + 1 : null)
-                    .filter(idx => idx !== null);
-                  
+                  const fileContent = fs.readFileSync(
+                    file.filename, "utf8"
+                  );
+                  const lines = fileContent.split("\n");
+                  const longLines = lines.map((line, idx) =>
+                    line.length > 80 ? idx + 1 : null
+                  ).filter(idx => idx !== null);
                   if (longLines.length > 0) {
                     lineLengthValid = false;
-                    invalidFiles.push(`${file.filename}: Lines ${longLines.join(', ')}`);
+                    invalidFiles.push(
+                      `${file.filename}: Lines ${longLines.join(", ")}`
+                    );
                   }
                 }
               } catch (error) {
                 console.error(`Error reading file ${file.filename}: ${error}`);
               }
             }
-            
-            // Deprecation check
-            const pythonFiles = files.data
-              .filter(file => file.filename.endsWith('.py'))
-              .filter(file => file.filename.startsWith('django/'));
-            
+            const pythonFiles = files.data.filter(
+              file => file.filename.endsWith(".py")
+            ).filter(
+              file => file.filename.startsWith("django/")
+            );
             let deprecationFound = false;
             let deprecationValid = true;
             let deprecationData = { documented: true, tested: true };
-            
             for (const file of pythonFiles) {
               try {
                 if (fs.existsSync(file.filename)) {
-                  const fileContent = fs.readFileSync(file.filename, 'utf8');
-                  if (fileContent.includes('RemovedInDjango') || fileContent.includes('warnings.warn(')) {
+                  const fileContent = fs.readFileSync(
+                    file.filename, "utf8"
+                  );
+                  if (
+                    fileContent.includes("RemovedInDjango") ||
+                    fileContent.includes("warnings.warn(")
+                  ) {
                     deprecationFound = true;
-                    deprecationData.documented = fileContent.includes('.. deprecated::');
+                    deprecationData.documented =
+                      fileContent.includes(".. deprecated::");
                     break;
                   }
                 }
@@ -228,17 +247,20 @@ jobs:
                 console.error(`Error reading file ${file.filename}: ${error}`);
               }
             }
-            
             if (deprecationFound) {
-              const testFiles = files.data
-                .filter(file => file.filename.endsWith('.py'))
-                .filter(file => file.filename.includes('/tests/'));
-              
+              const testFiles = files.data.filter(
+                file => file.filename.endsWith(".py")
+              ).filter(
+                file => file.filename.includes("/tests/")
+              );
               deprecationData.tested = testFiles.some(file => {
                 try {
                   if (fs.existsSync(file.filename)) {
-                    const fileContent = fs.readFileSync(file.filename, 'utf8');
-                    return fileContent.includes('test_deprecation') || fileContent.includes('assertWarns(');
+                    const fileContent = fs.readFileSync(
+                      file.filename, "utf8"
+                    );
+                    return fileContent.includes("test_deprecation") ||
+                           fileContent.includes("assertWarns(");
                   }
                   return false;
                 } catch (error) {
@@ -246,14 +268,11 @@ jobs:
                   return false;
                 }
               });
-              
-              deprecationValid = deprecationData.documented && deprecationData.tested;
+              deprecationValid =
+                deprecationData.documented && deprecationData.tested;
             }
-            
-            // Output results
             const allValid = lineLengthValid && deprecationValid;
-            
-            return { 
+            return {
               line_length_valid: lineLengthValid,
               deprecation_valid: deprecationValid,
               invalid_files: invalidFiles,
@@ -261,53 +280,49 @@ jobs:
               all_valid: allValid
             };
 
-            - name: Summarize documentation checks
-            id: summarize-doc-checks
-            uses: actions/github-script@v7
-            with:
-              script: |
-                const { owner, repo, number } = context.issue;
-          
-                // Debug: Log the raw outputs of the check-doc-format step
-                console.log("Raw outputs from check-doc-format:", steps['check-doc-format'].outputs);
-          
-                // Serialize the outputs to ensure they are valid JSON
-                const rawOutputs = steps['check-doc-format'].outputs;
-                const serializedOutputs = JSON.stringify(rawOutputs);
-          
-                // Parse the serialized outputs
-                const result = JSON.parse(serializedOutputs);
-          
-                // Extract the "all_valid" output
-                const allValid = result.all_valid === 'true';
-                core.setOutput('all_valid', allValid ? 'true' : 'false');
-          
-                // Create warnings if needed
-                if (!result.line_length_valid && result.invalid_files.length > 0) {
-                  await github.rest.issues.createComment({
-                    owner, repo, issue_number: number,
-                    body: `⚠️ **Documentation Line Length Warning**\nThe following documentation files contain lines longer than 80 characters:\n${result.invalid_files.join('\n')}\n\nPlease ensure all documentation lines are at most 80 characters long.`
-                  });
-                }
-          
-                if (!result.deprecation_valid) {
-                  let message = `⚠️ **Deprecation Warning**\nThis PR appears to include code that raises deprecation warnings.`;
-          
-                  if (!result.deprecation_data.documented) {
-                    message += `\n- Please ensure deprecations are documented with \`.. deprecated::\` in the docstring.`;
-                  }
-          
-                  if (!result.deprecation_data.tested) {
-                    message += `\n- Please ensure deprecation warnings are tested with appropriate test cases.`;
-                  }
-          
-                  await github.rest.issues.createComment({
-                    owner, repo, issue_number: number,
-                    body: message
-                  });
-                }
-          
-                return { all_valid: allValid };
+      - name: Summarize documentation checks
+        id: summarize-doc-checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo, number } = context.issue;
+            console.log("Raw outputs from check-doc-format:",
+              steps["check-doc-format"].outputs);
+            const rawOutputs = steps["check-doc-format"].outputs;
+            const serializedOutputs = JSON.stringify(rawOutputs);
+            const result = JSON.parse(serializedOutputs);
+            const allValid = result.all_valid === "true";
+            core.setOutput("all_valid", allValid ? "true" : "false");
+            if (!result.line_length_valid &&
+                result.invalid_files.length > 0) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: number,
+                body: "⚠️ **Documentation Line Length Warning**\n" +
+                      "The following documentation files contain lines longer " +
+                      "than 80 characters:\n" +
+                      result.invalid_files.join("\n") +
+                      "\n\nPlease ensure all documentation lines are at most " +
+                      "80 characters long."
+              });
+            }
+            if (!result.deprecation_valid) {
+              let message = "⚠️ **Deprecation Warning**\n" +
+                            "This PR appears to include code that raises " +
+                            "deprecation warnings.";
+              if (!result.deprecation_data.documented) {
+                message += "\n- Please ensure deprecations are documented with " +
+                           "`.. deprecated::` in the docstring.";
+              }
+              if (!result.deprecation_data.tested) {
+                message += "\n- Please ensure deprecation warnings are tested " +
+                           "with appropriate test cases.";
+              }
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: number,
+                body: message
+              });
+            }
+            return { all_valid: allValid };
 
   # Check for release notes if needed
   release-notes:
@@ -319,122 +334,132 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Check for release notes
         id: check-release-notes
         uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo, number } = context.issue;
-            
-            // Get files and PR data
             const [files, prData] = await Promise.all([
-              github.rest.pulls.listFiles({ owner, repo, pull_number: number }),
-              github.rest.pulls.get({ owner, repo, pull_number: number })
+              github.rest.pulls.listFiles({
+                owner, repo, pull_number: number
+              }),
+              github.rest.pulls.get({
+                owner, repo, pull_number: number
+              })
             ]);
-            
-            // Focus on core Django modules only
-            const significantChanges = files.data
-              .filter(file => file.filename.endsWith('.py'))
-              .filter(file => 
-                file.filename.startsWith('django/') && 
-                !file.filename.includes('tests/') &&
-                !file.filename.includes('django/utils/') &&
-                !file.filename.includes('django/conf/')
-              );
-            
-            // Detect feature/bugfix from PR title
-            const prTitle = prData.data.title.toLowerCase();
-            const isFeature = prTitle.includes('feature') || prTitle.includes('add') || 
-                             prTitle.includes('new') || prTitle.includes('implement');
-            const isBugfix = prTitle.includes('fix') || prTitle.includes('bug') || 
-                            prTitle.includes('issue') || prTitle.includes('solve');
-            
-            // Check release notes
-            const releaseNotesModified = files.data.some(file => 
-              file.filename.startsWith('docs/releases/') || 
-              file.filename.includes('release_notes')
+            const significantChanges = files.data.filter(
+              file => file.filename.endsWith(".py")
+            ).filter(
+              file =>
+                file.filename.startsWith("django/") &&
+                !file.filename.includes("tests/") &&
+                !file.filename.includes("django/utils/") &&
+                !file.filename.includes("django/conf/")
             );
-            
-            const needsReleaseNotes = (isFeature || isBugfix) && significantChanges.length > 0;
+            const prTitle = prData.data.title.toLowerCase();
+            const isFeature = prTitle.includes("feature") ||
+                              prTitle.includes("add") ||
+                              prTitle.includes("new") ||
+                              prTitle.includes("implement");
+            const isBugfix = prTitle.includes("fix") ||
+                             prTitle.includes("bug") ||
+                             prTitle.includes("issue") ||
+                             prTitle.includes("solve");
+            const releaseNotesModified = files.data.some(
+              file =>
+                file.filename.startsWith("docs/releases/") ||
+                file.filename.includes("release_notes")
+            );
+            const needsReleaseNotes =
+              (isFeature || isBugfix) &&
+              significantChanges.length > 0;
             const hasReleaseNotes = releaseNotesModified;
-            
-            core.setOutput('has_release_notes', hasReleaseNotes ? 'true' : 'false');
-            
+            core.setOutput("has_release_notes",
+              hasReleaseNotes ? "true" : "false");
             if (needsReleaseNotes && !hasReleaseNotes) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: number,
-                body: `⚠️ **Release Notes Reminder**\nThis PR appears to include significant changes that should be documented in the release notes. Please consider adding appropriate entries to \`docs/releases/\`.`
+                body: "⚠️ **Release Notes Reminder**\n" +
+                      "This PR appears to include significant changes that " +
+                      "should be documented in the release notes. Please consider " +
+                      "adding appropriate entries to `docs/releases/`."
               });
             }
-            
             return { has_release_notes: hasReleaseNotes };
 
   # PR summary and label management
   pr-review-summary:
     runs-on: ubuntu-latest
-    needs: [ci-status-check, test-coverage, documentation-checks, release-notes]
+    needs:
+      - ci-status-check
+      - test-coverage
+      - documentation-checks
+      - release-notes
     steps:
       - name: Generate PR Review Summary
         uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo, number } = context.issue;
-            
-            // Get PR information
             const pull = await github.rest.pulls.get({
               owner, repo, pull_number: number
             });
-            
-            // Collect check results
-            const ciStatus = '${{ needs.ci-status-check.outputs.ci_status }}';
-            const hasTests = '${{ needs.test-coverage.outputs.has_tests }}';
-            const hasVersionNotes = '${{ needs.documentation-checks.outputs.has_version_notes }}';
-            const docChecksValid = '${{ needs.documentation-checks.outputs.doc_checks_valid }}';
-            const hasReleaseNotes = '${{ needs.release-notes.outputs.has_release_notes }}';
-            
-            // Check if all pass or are not applicable
-            const allChecksPass = 
-              (ciStatus === 'success' || ciStatus === 'pending') && 
-              hasTests === 'true' && 
-              (hasVersionNotes === 'true' || hasVersionNotes === '') &&
-              (docChecksValid === 'true' || docChecksValid === '') &&
-              (hasReleaseNotes === 'true' || hasReleaseNotes === '');
-            
-            // Create summary markdown
-            let summary = `## PR Review Summary\n\n`;
-            summary += `**PR Title**: ${pull.data.title}\n`;
-            summary += `**Author**: ${pull.data.user.login}\n\n`;
-            summary += `### Automated Checks\n\n`;
-            
-            summary += `- CI Status: ${ciStatus === 'success' ? '✅ Passing' : 
-                       (ciStatus === 'pending' ? '⏳ In progress' : '❌ Failing')}\n`;
-            summary += `- Tests Included: ${hasTests === 'true' ? '✅ Yes' : '❌ No'}\n`;
-            summary += `- Version Notes: ${hasVersionNotes === 'true' ? '✅ Included' : 
-                        (hasVersionNotes === '' ? '➖ N/A' : '❌ Missing')}\n`;
-            summary += `- Documentation Format: ${docChecksValid === 'true' ? '✅ Valid' : 
-                        (docChecksValid === '' ? '➖ N/A' : '❌ Invalid')}\n`;
-            summary += `- Release Notes: ${hasReleaseNotes === 'true' ? '✅ Included' : 
-                        (hasReleaseNotes === '' ? '➖ N/A' : '❌ Missing')}\n\n`;
-            
+            const ciStatus = "${{ needs.ci-status-check.outputs.ci_status }}";
+            const hasTests = "${{ needs.test-coverage.outputs.has_tests }}";
+            const hasVersionNotes = "${{ needs.documentation-checks.outputs.has_version_notes }}";
+            const docChecksValid = "${{ needs.documentation-checks.outputs.doc_checks_valid }}";
+            const hasReleaseNotes = "${{ needs.release-notes.outputs.has_release_notes }}";
+            const allChecksPass =
+              (ciStatus === "success" || ciStatus === "pending") &&
+              hasTests === "true" &&
+              (hasVersionNotes === "true" || hasVersionNotes === "") &&
+              (docChecksValid === "true" || docChecksValid === "") &&
+              (hasReleaseNotes === "true" || hasReleaseNotes === "");
+            let summary = "## PR Review Summary\n\n";
+            summary += "**PR Title**: " + pull.data.title + "\n";
+            summary += "**Author**: " + pull.data.user.login + "\n\n";
+            summary += "### Automated Checks\n\n";
+            summary += "- CI Status: " +
+              (ciStatus === "success"
+                ? "✅ Passing"
+                : (ciStatus === "pending"
+                  ? "⏳ In progress"
+                  : "❌ Failing")) + "\n";
+            summary += "- Tests Included: " +
+              (hasTests === "true" ? "✅ Yes" : "❌ No") + "\n";
+            summary += "- Version Notes: " +
+              (hasVersionNotes === "true"
+                ? "✅ Included"
+                : (hasVersionNotes === ""
+                  ? "➖ N/A"
+                  : "❌ Missing")) + "\n";
+            summary += "- Documentation Format: " +
+              (docChecksValid === "true"
+                ? "✅ Valid"
+                : (docChecksValid === ""
+                  ? "➖ N/A"
+                  : "❌ Invalid")) + "\n";
+            summary += "- Release Notes: " +
+              (hasReleaseNotes === "true"
+                ? "✅ Included"
+                : (hasReleaseNotes === ""
+                  ? "➖ N/A"
+                  : "❌ Missing")) + "\n\n";
             if (allChecksPass) {
-              summary += `### Verdict\n\n✅ **All checks passed. This PR is ready for review!**\n`;
-              
-              // Add "ready for review" label only when checks pass
+              summary += "### Verdict\n\n" +
+                "✅ **All checks passed. This PR is ready for review!**\n";
               await github.rest.issues.addLabels({
                 owner, repo, issue_number: number,
-                labels: ['ready for review']
+                labels: ["ready for review"]
               });
             } else {
-              summary += `### Verdict\n\n⚠️ **Some checks need attention. Please address the issues before requesting review.**\n`;
-              // No "needs work" label as per requirements
+              summary += "### Verdict\n\n" +
+                "⚠️ **Some checks need attention. Please address the issues " +
+                "before requesting review.**\n";
             }
-            
-            // Post summary as a comment
             await github.rest.issues.createComment({
               owner, repo, issue_number: number,
               body: summary
             });
-            
-            // Update the GitHub step summary
             core.summary.markdown(summary).write();

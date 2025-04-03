@@ -1,0 +1,143 @@
+name: Trac Ticket Validation
+on:
+  pull_request_target:
+    types: [edited, opened, reopened, ready_for_review]
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+permissions:
+  pull-requests: write
+  issues: write
+jobs:
+  ticket_validation:
+    name: Validate Trac Tickets and apply labels
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate and label
+        uses: actions/github-script@v7
+        env:
+          TRAC_API: "https://code.djangoproject.com/jsonrpc"
+        with:
+          script: |
+            const { title, number, labels } = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+
+            // Match Django's official title patterns for ticket references
+            const ticketMatch = title.match(/(?:close[sd]?|fixe[sd]?|refs)\s+#?(\d+)/i);
+            const ticketId = ticketMatch?.[1];
+
+
+            // Define labels for different ticket types
+            const TYPE_LABELS = {
+              'defect': 'type: Bug',
+              'enhancement': 'type: New Feature',
+              'task': 'type: Cleanup/Optimization'
+            };
+            async function validateTicket() {
+              if (!ticketId) {
+                if (!labels.some(l => l.name === 'no ticket')) {
+                  await addLabel('no ticket');
+                }
+                return;
+              }
+
+
+              try {
+                // NEED HELP: To confirm the correct Trac API calling
+
+
+                // Make a JSON-RPC request to the Trac API to fetch ticket details
+                const response = await fetch(process.env.TRAC_API, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    jsonrpc: "2.0",
+                    method: "ticket.get",
+                    params: [parseInt(ticketId)],
+                    id: 1
+                  })
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+               
+                const data = await response.json();
+                // Handle errors in the JSON-RPC response
+                if (data.error) {
+                  await handleInvalidTicket(ticketId, data.error.message);
+                  return;
+                }
+                // Validate the response structure and extract the ticket type
+                if (!data.result?.[3]?.type) {
+                  throw new Error('Invalid ticket data structure');
+                }
+                const ticketType = data.result[3].type.toLowerCase();
+                await handleValidTicket(ticketType);
+              } catch (error) {
+                console.error('Validation failed:', error);
+                await handleInvalidTicket(ticketId, error.message);
+              }
+            }
+            async function handleInvalidTicket(ticketId, reason) {
+              await removeLabel('no ticket');
+              if (!labels.some(l => l.name === 'invalid ticket')) {
+                await addLabel('invalid ticket');
+              }
+              await postComment(
+                `**Ticket Validation Failed**\n` +
+                `Could not verify #${ticketId}: ${reason}\n` +
+                `• Verify ticket exists: https://code.djangoproject.com/ticket/${ticketId}\n` +
+                `• Create new ticket: https://code.djangoproject.com/newticket`
+              );
+            }
+            # Helper functions
+            async function handleValidTicket(ticketType) {
+              await removeLabel('no ticket');
+              await removeLabel('invalid ticket');
+             
+              const label = TYPE_LABELS[ticketType] || 'type: Other';
+              await syncLabels(label);
+            }
+            async function syncLabels(newLabel) {
+              const typePrefix = 'type: ';
+              const currentLabels = labels.map(l => l.name);
+             
+              // Remove existing type labels
+              for (const label of currentLabels.filter(n => n.startsWith(typePrefix))) {
+                if (label !== newLabel) await removeLabel(label);
+              }
+             
+              // Add new label if needed
+              if (!currentLabels.includes(newLabel)) {
+                await addLabel(newLabel);
+              }
+            }
+            async function addLabel(label) {
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: number,
+                labels: [label]
+              });
+            }
+            async function removeLabel(label) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: number,
+                  name: label
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
+            async function postComment(message) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: number,
+                body: message
+              });
+            }
+
+
+            await validateTicket();

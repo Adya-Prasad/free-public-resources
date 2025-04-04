@@ -1,15 +1,12 @@
 name: Stale PR Management
 
-
 on:
   schedule:
-    - cron: '0 0 * * 1'  # Runs every Monday at midnight UTC
-
+    - cron: '0 0 * * 6'  # Runs weekly on Saturday at midnight
 
 permissions:
   pull-requests: write
   issues: write
-
 
 jobs:
   check_stale_prs:
@@ -26,21 +23,17 @@ jobs:
             const repo = context.repo.repo;
             const now = new Date();
 
-
             // Helper function to calculate a date before now
-            function getDateBeforeNow(months = 0, weeks = 0, days = 0) {
+            function getDateBeforeNow(days = 0) {
               const date = new Date(now);
-              date.setMonth(date.getMonth() - months);
-              date.setDate(date.getDate() - (weeks * 7) - days);
+              date.setDate(date.getDate() - days);
               return date;
             }
 
-
             // Inactivity thresholds
-            const threeMonthsBeforeNow = getDateBeforeNow(3);
-            const fourMonthsBeforeNow = getDateBeforeNow(4);
-            const fourMonthsAndOneWeekBeforeNow = getDateBeforeNow(4, 1); // 4 months + 1 week
-
+            const threeMonthsBeforeNow = getDateBeforeNow(90);
+            const fourMonthsBeforeNow = getDateBeforeNow(120);
+            const oneWeekBeforeNow = getDateBeforeNow(7);
 
             // Helper function to paginate open PRs
             async function getAllOpenPRs() {
@@ -62,7 +55,6 @@ jobs:
               return allPRs;
             }
 
-
             async function processPRs() {
               const pullRequests = await getAllOpenPRs();
               console.log(`Total PRs fetched: ${pullRequests.length}`);
@@ -71,7 +63,6 @@ jobs:
                 const prNumber = pr.number;
                 const updatedAt = new Date(pr.updated_at);
 
-
                 // Fetch PR labels
                 const { data: labels } = await github.rest.issues.listLabelsOnIssue({
                   owner,
@@ -79,7 +70,6 @@ jobs:
                   issue_number: prNumber
                 });
                 const labelNames = labels.map(l => l.name);
-
 
                 // Fetch PR timeline to check for contributor activity (comments & events)
                 const { data: timeline } = await github.rest.issues.listEvents({
@@ -93,73 +83,48 @@ jobs:
                   .map(event => new Date(event.created_at))
                   .sort((a, b) => b - a)[0] || updatedAt;
 
-
-                // Rule 1: 3 months inactivity → Add reminder
-                if (lastContributorActivity < threeMonthsBeforeNow && !labelNames.includes('stale-notice')) {
+                // Rule 1: 3 months inactivity → Add reminder comment
+                if (lastContributorActivity < threeMonthsBeforeNow && !labelNames.includes('stale')) {
                   await github.rest.issues.createComment({
                     owner,
                     repo,
                     issue_number: prNumber,
                     body: `👋 This PR has been inactive for 3 months. Are you still working on this? If you're facing issues, please update the PR or discuss them in our forum.`
                   });
-                  await github.rest.issues.addLabels({
-                    owner,
-                    repo,
-                    issue_number: prNumber,
-                    labels: ['stale-notice']
-                  });
-                  console.log(`PR #${prNumber} marked with stale-notice.`);
+                  console.log(`PR #${prNumber} received a reminder comment.`);
                 }
 
-
-                // Rule 2: If contributor responds after the reminder, remove stale-notice
-                if (labelNames.includes('stale-notice') && lastContributorActivity > threeMonthsBeforeNow) {
-                  try {
-                    await github.rest.issues.removeLabel({
-                      owner,
-                      repo,
-                      issue_number: prNumber,
-                      name: 'stale-notice'
-                    });
-                    console.log(`PR #${prNumber} is active again. Removed stale-notice.`);
-                  } catch (e) {
-                    // Ignore if label not found
-                  }
-                }
-
-
-                // Rule 3: 4 months inactivity → Add warning
-                if (lastContributorActivity < fourMonthsBeforeNow && !labelNames.includes('need-attention')) {
+                // Rule 2: 4 months inactivity → Add warning comment
+                if (lastContributorActivity < fourMonthsBeforeNow && !labelNames.includes('stale')) {
                   await github.rest.issues.createComment({
                     owner,
                     repo,
                     issue_number: prNumber,
                     body: `⚠️ This PR has been inactive for 4 months. If no action is taken soon, it may be marked as stale and closed.`
                   });
-                  await github.rest.issues.addLabels({
-                    owner,
-                    repo,
-                    issue_number: prNumber,
-                    labels: ['need-attention']
-                  });
-                  console.log(`PR #${prNumber} marked with need-attention.`);
+                  console.log(`PR #${prNumber} received a warning comment.`);
                 }
 
-
-                // Rule 4: 4 months + 1 week inactivity after warning → Mark as stale & close
-                if (lastContributorActivity < fourMonthsAndOneWeekBeforeNow && labelNames.includes('need-attention')) {
-                  await github.rest.issues.createComment({
-                    owner,
-                    repo,
-                    issue_number: prNumber,
-                    body: `🚨 This PR has been inactive for too long. Closing due to inactivity. If you are still working on this, please reopen the PR or ask a maintainer for help.`
-                  });
+                // Rule 3: 1 week inactivity after warning → Mark as stale & close
+                if (lastContributorActivity < oneWeekBeforeNow && !labelNames.includes('stale')) {
+                  // Add the stale label first
                   await github.rest.issues.addLabels({
                     owner,
                     repo,
                     issue_number: prNumber,
                     labels: ['stale']
                   });
+                  console.log(`PR #${prNumber} marked as stale.`);
+
+                  // Then add the closing comment
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: prNumber,
+                    body: `🚨 This PR has been inactive for too long. Closing due to inactivity. If you are still working on this, please reopen the PR or ask a maintainer for help.`
+                  });
+
+                  // Finally, close the PR
                   await github.rest.pulls.update({
                     owner,
                     repo,
@@ -170,6 +135,5 @@ jobs:
                 }
               }
             }
-
 
             await processPRs();

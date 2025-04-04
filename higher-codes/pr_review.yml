@@ -1,4 +1,3 @@
----
 name: PR Review
 
 on:
@@ -6,7 +5,7 @@ on:
     types: [opened, synchronize, reopened]
     paths-ignore:
       - 'docs/releases/**'
-  workflow_dispatch: true
+  workflow_dispatch:
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -22,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ci_status: ${{ steps.check-ci.outputs.status }}
+    continue-on-error: true  # Allow this job to fail without stopping the workflow
     steps:
       - name: Check CI Status
         id: check-ci
@@ -62,6 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_tests: ${{ steps.check-tests.outputs.has_tests }}
+    continue-on-error: true  # Allow this job to fail without stopping the workflow
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -109,7 +110,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_version_notes: ${{ steps.check-version-notes.outputs.has_version_notes }}
-      doc_checks_valid: ${{ steps.summarize-doc-checks.outputs.all_valid }}
+      doc_checks_valid: ${{ steps.check-doc-format.outputs.all_valid }}
+    continue-on-error: true  # Allow this job to fail without stopping the workflow
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -272,6 +274,11 @@ jobs:
                 deprecationData.documented && deprecationData.tested;
             }
             const allValid = lineLengthValid && deprecationValid;
+            core.setOutput('line_length_valid', lineLengthValid ? 'true' : 'false');
+            core.setOutput('deprecation_valid', deprecationValid ? 'true' : 'false');
+            core.setOutput('invalid_files', JSON.stringify(invalidFiles));
+            core.setOutput('deprecation_data', JSON.stringify(deprecationData));
+            core.setOutput('all_valid', allValid ? 'true' : 'false');
             return {
               line_length_valid: lineLengthValid,
               deprecation_valid: deprecationValid,
@@ -286,49 +293,46 @@ jobs:
         with:
           script: |
             const { owner, repo, number } = context.issue;
-            console.log("Raw outputs from check-doc-format:",
-              steps["check-doc-format"].outputs);
-            const rawOutputs = steps["check-doc-format"].outputs;
-            const serializedOutputs = JSON.stringify(rawOutputs);
-            const result = JSON.parse(serializedOutputs);
-            const allValid = result.all_valid === "true";
+            const lineLengthValid = ${{ steps.check-doc-format.outputs.line_length_valid }} === "true";
+            const deprecationValid = ${{ steps.check-doc-format.outputs.deprecation_valid }} === "true";
+            const invalidFiles = JSON.parse(${{ steps.check-doc-format.outputs.invalid_files }});
+            const deprecationData = JSON.parse(${{ steps.check-doc-format.outputs.deprecation_data }});
+            const allValid = ${{ steps.check-doc-format.outputs.all_valid }} === "true";
+
+            // Set the output for the job
             core.setOutput("all_valid", allValid ? "true" : "false");
-            if (!result.line_length_valid &&
-                result.invalid_files.length > 0) {
+
+            // Post comments if there are issues
+            if (!lineLengthValid && invalidFiles.length > 0) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: number,
-                body: "⚠️ **Documentation Line Length Warning**\n" +
-                      "The following documentation files contain lines longer " +
-                      "than 80 characters:\n" +
-                      result.invalid_files.join("\n") +
-                      "\n\nPlease ensure all documentation lines are at most " +
-                      "80 characters long."
+                body: `⚠️ **Documentation Line Length Warning**\nThe following documentation files contain lines longer than 80 characters:\n${invalidFiles.join("\n")}\n\nPlease ensure all documentation lines are at most 80 characters long.`
               });
             }
-            if (!result.deprecation_valid) {
-              let message = "⚠️ **Deprecation Warning**\n" +
-                            "This PR appears to include code that raises " +
-                            "deprecation warnings.";
-              if (!result.deprecation_data.documented) {
-                message += "\n- Please ensure deprecations are documented with " +
-                           "`.. deprecated::` in the docstring.";
+
+            if (!deprecationValid) {
+              let message = `⚠️ **Deprecation Warning**\nThis PR appears to include code that raises deprecation warnings.`;
+
+              if (!deprecationData.documented) {
+                message += `\n- Please ensure deprecations are documented with \`.. deprecated::\` in the docstring.`;
               }
-              if (!result.deprecation_data.tested) {
-                message += "\n- Please ensure deprecation warnings are tested " +
-                           "with appropriate test cases.";
+
+              if (!deprecationData.tested) {
+                message += `\n- Please ensure deprecation warnings are tested with appropriate test cases.`;
               }
+
               await github.rest.issues.createComment({
                 owner, repo, issue_number: number,
                 body: message
               });
             }
-            return { all_valid: allValid };
 
   # Check for release notes if needed
   release-notes:
     runs-on: ubuntu-latest
     outputs:
       has_release_notes: ${{ steps.check-release-notes.outputs.has_release_notes }}
+    continue-on-error: true  # Allow this job to fail without stopping the workflow
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -396,6 +400,7 @@ jobs:
       - test-coverage
       - documentation-checks
       - release-notes
+    if: always()
     steps:
       - name: Generate PR Review Summary
         uses: actions/github-script@v7
@@ -432,7 +437,7 @@ jobs:
               (hasVersionNotes === "true"
                 ? "✅ Included"
                 : (hasVersionNotes === ""
-                  ? "➖ N/A"
+                  ? "❌ Problem detected, may be docs.yml failed!"
                   : "❌ Missing")) + "\n";
             summary += "- Documentation Format: " +
               (docChecksValid === "true"
@@ -445,7 +450,7 @@ jobs:
                 ? "✅ Included"
                 : (hasReleaseNotes === ""
                   ? "➖ N/A"
-                  : "❌ Missing")) + "\n\n";
+                  : "❌ Missing (may be not required)")) + "\n\n";
             if (allChecksPass) {
               summary += "### Verdict\n\n" +
                 "✅ **All checks passed. This PR is ready for review!**\n";
@@ -454,12 +459,12 @@ jobs:
                 labels: ["ready for review"]
               });
             } else {
-              summary += "### Verdict\n\n" +
-                "⚠️ **Some checks need attention. Please address the issues " +
+              summary += "### Result\n\n" +
+                "⚠️ **Some checks need failed. Please address the issues " +
                 "before requesting review.**\n";
             }
             await github.rest.issues.createComment({
               owner, repo, issue_number: number,
               body: summary
             });
-            core.summary.markdown(summary).write();
+            core.summary.addRaw(summary).write();

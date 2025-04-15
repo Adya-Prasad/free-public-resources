@@ -1,3 +1,6 @@
+# The example workflow you just added is triggered each time code is pushed to the branch
+# It shows how GitHub Actions can work with the contents of the repository.
+
 name: GitHub Actions Demo
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
 on: [push]

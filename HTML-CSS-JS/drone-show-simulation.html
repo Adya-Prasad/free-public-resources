@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drone Show Simulation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // OrbitControls implementation
+        (function() {
+            'use strict';
+            
+            THREE.OrbitControls = function(object, domElement) {
+                this.object = object;
+                this.domElement = domElement !== undefined ? domElement : document;
+                
+                this.enabled = true;
+                this.target = new THREE.Vector3();
+                this.enableZoom = true;
+                this.zoomSpeed = 1.0;
+                this.enableRotate = true;
+                this.rotateSpeed = 1.0;
+                this.enablePan = true;
+                this.enableDamping = false;
+                this.dampingFactor = 0.25;
+                
+                var scope = this;
+                var rotateStart = new THREE.Vector2();
+                var rotateEnd = new THREE.Vector2();
+                var rotateDelta = new THREE.Vector2();
+                var panStart = new THREE.Vector2();
+                var panEnd = new THREE.Vector2();
+                var panDelta = new THREE.Vector2();
+                var dollyStart = new THREE.Vector2();
+                var dollyEnd = new THREE.Vector2();
+                var dollyDelta = new THREE.Vector2();
+                
+                var spherical = new THREE.Spherical();
+                var sphericalDelta = new THREE.Spherical();
+                var scale = 1;
+                var panOffset = new THREE.Vector3();
+                
+                var STATE = { NONE: -1, ROTATE: 0, DOLLY: 1, PAN: 2, TOUCH_ROTATE: 3, TOUCH_DOLLY_PAN: 4 };
+                var state = STATE.NONE;
+                
+                this.update = function() {
+                    var offset = new THREE.Vector3();
+                    var quat = new THREE.Quaternion().setFromUnitVectors(object.up, new THREE.Vector3(0, 1, 0));
+                    var quatInverse = quat.clone().invert();
+                    
+                    var lastPosition = new THREE.Vector3();
+                    var lastQuaternion = new THREE.Quaternion();
+                    
+                    return function update() {
+                        var position = scope.object.position;
+                        offset.copy(position).sub(scope.target);
+                        offset.applyQuaternion(quat);
+                        spherical.setFromVector3(offset);
+                        
+                        if (scope.enableDamping) {
+                            spherical.theta += sphericalDelta.theta * scope.dampingFactor;
+                            spherical.phi += sphericalDelta.phi * scope.dampingFactor;
+                        } else {
+                            spherical.theta += sphericalDelta.theta;
+                            spherical.phi += sphericalDelta.phi;
+                        }
+                        
+                        spherical.phi = Math.max(0.000001, Math.min(Math.PI - 0.000001, spherical.phi));
+                        spherical.makeSafe();
+                        spherical.radius *= scale;
+                        spherical.radius = Math.max(1, Math.min(1000, spherical.radius));
+                        
+                        scope.target.add(panOffset);
+                        offset.setFromSpherical(spherical);
+                        offset.applyQuaternion(quatInverse);
+                        position.copy(scope.target).add(offset);
+                        scope.object.lookAt(scope.target);
+                        
+                        if (scope.enableDamping) {
+                            sphericalDelta.theta *= (1 - scope.dampingFactor);
+                            sphericalDelta.phi *= (1 - scope.dampingFactor);
+                        } else {
+                            sphericalDelta.set(0, 0, 0);
+                        }
+                        
+                        scale = 1;
+                        panOffset.set(0, 0, 0);
+                        
+                        return false;
+                    };
+                }();
+                
+                function getMouseOnScreen(pageX, pageY) {
+                    var vector = new THREE.Vector2();
+                    vector.set(
+                        (pageX - scope.domElement.offsetLeft) / scope.domElement.offsetWidth,
+                        (pageY - scope.domElement.offsetTop) / scope.domElement.offsetHeight
+                    );
+                    return vector;
+                }
+                
+                function onMouseDown(event) {
+                    if (!scope.enabled) return;
+                    event.preventDefault();
+                    
+                    if (event.button === 0) {
+                        state = STATE.ROTATE;
+                        rotateStart.set(event.clientX, event.clientY);
+                    } else if (event.button === 1) {
+                        state = STATE.DOLLY;
+                        dollyStart.set(event.clientX, event.clientY);
+                    } else if (event.button === 2) {
+                        state = STATE.PAN;
+                        panStart.set(event.clientX, event.clientY);
+                    }
+                    
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                }
+                
+                function onMouseMove(event) {
+                    if (!scope.enabled) return;
+                    event.preventDefault();
+                    
+                    if (state === STATE.ROTATE) {
+                        rotateEnd.set(event.clientX, event.clientY);
+                        rotateDelta.subVectors(rotateEnd, rotateStart).multiplyScalar(scope.rotateSpeed);
+                        
+                        var element = scope.domElement === document ? scope.domElement.body : scope.domElement;
+                        sphericalDelta.theta -= 2 * Math.PI * rotateDelta.x / element.clientHeight;
+                        sphericalDelta.phi -= 2 * Math.PI * rotateDelta.y / element.clientHeight;
+                        
+                        rotateStart.copy(rotateEnd);
+                    }
+                }
+                
+                function onMouseUp() {
+                    if (!scope.enabled) return;
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    state = STATE.NONE;
+                }
+                
+                function onMouseWheel(event) {
+                    if (!scope.enabled || !scope.enableZoom) return;
+                    event.preventDefault();
+                    
+                    if (event.deltaY < 0) {
+                        scale /= Math.pow(0.95, scope.zoomSpeed);
+                    } else if (event.deltaY > 0) {
+                        scale *= Math.pow(0.95, scope.zoomSpeed);
+                    }
+                }
+                
+                this.domElement.addEventListener('mousedown', onMouseDown);
+                this.domElement.addEventListener('wheel', onMouseWheel);
+                this.domElement.addEventListener('contextmenu', function(event) { event.preventDefault(); });
+                
+                this.update();
+            };
+        })();
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(180deg, #050d1a 0%, #0a1830 60%, #1a233a 100%);
+            color: #fff;
+            min-height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        /* Night sky stars overlay */
+        #star-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 0;
+            display: block;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 600px;
+            background: none;
+            margin-top: 0;
+            margin-bottom: 50px;
+            cursor:grab;
+            position: relative;
+            z-index: 1;
+        }
+        
+        #scene {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        
+        .btn {
+            padding: 10px 20px;
+            font-size: 1rem;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid #ffffff54;
+            color: rgb(196, 196, 194);
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 160px;
+            backdrop-filter: blur(10px);
+            font-weight: 550;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+            margin: 1rem;
+        }
+        
+        .btn:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            transition: all 0.5s ease;
+            z-index: -1;
+        }
+        
+        .btn:hover:before {
+            width: 100%;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(92, 92, 92, 0.5);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .btn.active {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: #fffef9;
+            box-shadow: 0 0 20px rgba(255, 244, 144, 0.4);
+            color: #ffffff;
+        }
+            
+    </style>
+</head>
+<body>
+<canvas id="star-canvas"></canvas>
+<h1>Drone Show Simulation</h1>
+<i>Drag to rotate the view | Scroll to zoom</i>
+    <div class="canvas-container">
+        <canvas id="scene"></canvas>
+    </div>      
+    <div class="controls">
+        <button class="btn btn-square" id="square-btn">Square Show</button>
+        <button class="btn btn-triangle" id="triangle-btn">Triangle Show</button>
+        <button class="btn btn-sphere active" id="sphere-btn">Sphere Show</button>
+    </div> 
+    <label>Created by Adya</label>
+    
+
+    <script>
+        // Wait for the DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Three.js
+            const scene = new THREE.Scene();
+            // Remove background color for transparent canvas
+            // scene.background = new THREE.Color(0x0a0f2e);
+            scene.background = null;
+            
+            const container = document.querySelector('.canvas-container');
+            const canvas = document.getElementById('scene');
+            
+            const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.z = 25;
+            
+            const renderer = new THREE.WebGLRenderer({ 
+                canvas: canvas,
+                antialias: true,
+                alpha: true
+            });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            // Add enhanced lighting for better glow effects
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            const pointLight1 = new THREE.PointLight(0xfff278, 1.2, 100);
+            pointLight1.position.set(10, 10, 10);
+            scene.add(pointLight1);
+            
+            const pointLight2 = new THREE.PointLight(0x78fff2, 0.8, 100);
+            pointLight2.position.set(-10, -10, 10);
+            scene.add(pointLight2);
+            
+            // SPEED CONTROL SECTION - Adjust these values to change transition speed
+            const TRANSITION_SPEED = {
+                base: 0.03,        // Base speed for all dots (was 0.02)
+                variation: 0.02    // Random variation range (was 0.03)
+            };
+            
+            // Create dots with enhanced materials for better glow
+            const dotCount = 200;
+            const dots = [];
+            const dotGeometry = new THREE.SphereGeometry(0.3, 22, 22);
+            
+            for (let i = 0; i < dotCount; i++) {
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0xffffff,
+                    shininess: 300,
+                    emissive: 0xffffff,
+                    emissiveIntensity: 0.8,
+                    specular: 0xffffff,
+                    transparent: true,
+                    opacity: 1.0
+                });
+                const dot = new THREE.Mesh(dotGeometry, material);
+                
+                // Start at origin, will be positioned by arrangeSphere()
+                dot.position.set(0, 0, 0);
+                dot.userData = {
+                    originalPosition: new THREE.Vector3(0, 0, 0),
+                    targetPosition: new THREE.Vector3(),
+                    // SLOWER SPEED: Reduced from 0.02 + Math.random() * 0.03 to about half
+                    speed: TRANSITION_SPEED.base + Math.random() * TRANSITION_SPEED.variation
+                };
+                scene.add(dot);
+                dots.push(dot);
+            }
+            
+            // Enhanced CSS glow effects for stronger light emission
+            canvas.style.filter = `
+                drop-shadow(0 0 50px #ffffff54)
+                drop-shadow(0 0 20px #ffffff44)
+                brightness(1)
+                contrast(1)
+            `;
+            
+            // Add transparent center reference
+            const centerGeometry = new THREE.SphereGeometry(0.3, 24, 24);
+            const centerMaterial = new THREE.MeshPhongMaterial({
+                color: 0xffffff,
+                shininess: 300,
+                emissive: 0xffffff,
+                emissiveIntensity: 0.3,
+                specular: 0xffffff,
+                transparent: true,
+                opacity: 0.1
+            });
+            const center = new THREE.Mesh(centerGeometry, centerMaterial);
+            scene.add(center);
+            
+            // Add orbit controls
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Animation variables
+            let currentArrangement = 'random';
+            let isAnimating = false;
+            
+            // Arrangement functions
+            function arrangeCube() {
+                const cubeSize = 12;
+                const halfSize = cubeSize / 2;
+                
+                // Calculate optimal grid size for each face
+                const dotsPerFace = Math.floor(dotCount / 6);
+                const remainingDots = dotCount % 6;
+                const gridSize = Math.ceil(Math.sqrt(dotsPerFace));
+                
+                let dotIndex = 0;
+                
+                // Define the 6 faces of the cube
+                const faces = [
+                    { normal: [1, 0, 0], u: [0, 1, 0], v: [0, 0, 1], center: [halfSize, 0, 0] },   // +X (right)
+                    { normal: [-1, 0, 0], u: [0, 1, 0], v: [0, 0, -1], center: [-halfSize, 0, 0] }, // -X (left)
+                    { normal: [0, 1, 0], u: [1, 0, 0], v: [0, 0, 1], center: [0, halfSize, 0] },   // +Y (top)
+                    { normal: [0, -1, 0], u: [1, 0, 0], v: [0, 0, -1], center: [0, -halfSize, 0] }, // -Y (bottom)
+                    { normal: [0, 0, 1], u: [1, 0, 0], v: [0, 1, 0], center: [0, 0, halfSize] },   // +Z (front)
+                    { normal: [0, 0, -1], u: [-1, 0, 0], v: [0, 1, 0], center: [0, 0, -halfSize] }  // -Z (back)
+                ];
+                
+                // Distribute dots evenly across all faces
+                for (let faceIdx = 0; faceIdx < 6; faceIdx++) {
+                    const face = faces[faceIdx];
+                    const currentFaceDots = dotsPerFace + (faceIdx < remainingDots ? 1 : 0);
+                    const currentGridSize = Math.ceil(Math.sqrt(currentFaceDots));
+                    
+                    let faceDotsPlaced = 0;
+                    
+                    // Create a uniform grid on this face
+                    for (let i = 0; i < currentGridSize && faceDotsPlaced < currentFaceDots && dotIndex < dotCount; i++) {
+                        for (let j = 0; j < currentGridSize && faceDotsPlaced < currentFaceDots && dotIndex < dotCount; j++) {
+                            // Calculate position on the face using grid coordinates
+                            const u = (i / (currentGridSize - 1) - 0.5) * cubeSize;
+                            const v = (j / (currentGridSize - 1) - 0.5) * cubeSize;
+                            
+                            // Calculate 3D position
+                            const x = face.center[0] + face.u[0] * u + face.v[0] * v;
+                            const y = face.center[1] + face.u[1] * u + face.v[1] * v;
+                            const z = face.center[2] + face.u[2] * u + face.v[2] * v;
+                            
+                            // Add very small random offset for natural look
+                            const offset = 0.1;
+                            const finalX = x + (Math.random() - 0.5) * offset;
+                            const finalY = y + (Math.random() - 0.5) * offset;
+                            const finalZ = z + (Math.random() - 0.5) * offset;
+                            
+                            dots[dotIndex].userData.targetPosition.set(finalX, finalY, finalZ);
+                            dotIndex++;
+                            faceDotsPlaced++;
+                        }
+                    }
+                }
+                
+                // Fill any remaining dots by distributing them randomly on faces
+                while (dotIndex < dotCount) {
+                    const faceIdx = Math.floor(Math.random() * 6);
+                    const face = faces[faceIdx];
+                    
+                    const u = (Math.random() - 0.5) * cubeSize;
+                    const v = (Math.random() - 0.5) * cubeSize;
+                    
+                    const x = face.center[0] + face.u[0] * u + face.v[0] * v;
+                    const y = face.center[1] + face.u[1] * u + face.v[1] * v;
+                    const z = face.center[2] + face.u[2] * u + face.v[2] * v;
+                    
+                    const offset = 0.1;
+                    const finalX = x + (Math.random() - 0.5) * offset;
+                    const finalY = y + (Math.random() - 0.5) * offset;
+                    const finalZ = z + (Math.random() - 0.5) * offset;
+                    
+                    dots[dotIndex].userData.targetPosition.set(finalX, finalY, finalZ);
+                    dotIndex++;
+                }
+                
+                currentArrangement = 'cube';
+            }
+
+            function arrangeTetrahedron() {
+                // Create a perfect regular tetrahedron
+                const size = 14; // Slightly larger for better visibility
+                
+                // Perfect tetrahedron vertices (equilateral triangle base + apex)
+                const h = size * Math.sqrt(6) / 3; // Height of tetrahedron
+                const r = size / Math.sqrt(3); // Circumradius of base triangle
+                
+                const vertices = [
+                    new THREE.Vector3(0, h/2, 0), // Top vertex
+                    new THREE.Vector3(-r/2, -h/2, -size/(2*Math.sqrt(3))), // Base vertex 1
+                    new THREE.Vector3(r/2, -h/2, -size/(2*Math.sqrt(3))), // Base vertex 2
+                    new THREE.Vector3(0, -h/2, size/Math.sqrt(3)) // Base vertex 3
+                ];
+                
+                // Define the 4 triangular faces with proper winding
+                const faces = [
+                    [0, 1, 2], // Top triangle 1
+                    [0, 2, 3], // Top triangle 2
+                    [0, 3, 1], // Top triangle 3
+                    [1, 3, 2]  // Base triangle
+                ];
+                
+                const dotsPerFace = Math.floor(dotCount / 4);
+                const remainingDots = dotCount % 4;
+                let dotIndex = 0;
+                
+                // Create uniform grid on each triangular face
+                for (let faceIdx = 0; faceIdx < 4; faceIdx++) {
+                    const [aIdx, bIdx, cIdx] = faces[faceIdx];
+                    const a = vertices[aIdx];
+                    const b = vertices[bIdx];
+                    const c = vertices[cIdx];
+                    
+                    const currentFaceDots = dotsPerFace + (faceIdx < remainingDots ? 1 : 0);
+                    
+                    // Create a triangular grid with uniform spacing
+                    const gridSize = Math.ceil(Math.sqrt(currentFaceDots * 2));
+                    let faceDotsPlaced = 0;
+                    
+                    // Generate uniform grid points on triangle
+                    for (let i = 0; i < gridSize && faceDotsPlaced < currentFaceDots && dotIndex < dotCount; i++) {
+                        const maxJ = gridSize - i;
+                        for (let j = 0; j < maxJ && faceDotsPlaced < currentFaceDots && dotIndex < dotCount; j++) {
+                            // Barycentric coordinates for uniform spacing
+                            const u = i / (gridSize - 1);
+                            const v = j / (gridSize - 1);
+                            const w = 1 - u - v;
+                            
+                            // Skip points outside triangle
+                            if (w < 0 || u + v > 1) continue;
+                            
+                            // Calculate 3D position using barycentric coordinates
+                            const pos = new THREE.Vector3(
+                                a.x * w + b.x * u + c.x * v,
+                                a.y * w + b.y * u + c.y * v,
+                                a.z * w + b.z * u + c.z * v
+                            );
+                            
+                            // Add very small random offset for natural look (much smaller than cube)
+                            const offset = 0.15; // Much smaller offset for tighter spacing
+                            pos.x += (Math.random() - 0.5) * offset;
+                            pos.y += (Math.random() - 0.5) * offset;
+                            pos.z += (Math.random() - 0.5) * offset;
+                            
+                            dots[dotIndex].userData.targetPosition.copy(pos);
+                            dotIndex++;
+                            faceDotsPlaced++;
+                        }
+                    }
+                }
+                
+                // Fill remaining dots with additional random points on faces
+                while (dotIndex < dotCount) {
+                    const faceIdx = Math.floor(Math.random() * 4);
+                    const [aIdx, bIdx, cIdx] = faces[faceIdx];
+                    const a = vertices[aIdx];
+                    const b = vertices[bIdx];
+                    const c = vertices[cIdx];
+                    
+                    // Generate random barycentric coordinates
+                    let u = Math.random();
+                    let v = Math.random();
+                    if (u + v > 1) {
+                        u = 1 - u;
+                        v = 1 - v;
+                    }
+                    const w = 1 - u - v;
+                    
+                    const pos = new THREE.Vector3(
+                        a.x * w + b.x * u + c.x * v,
+                        a.y * w + b.y * u + c.y * v,
+                        a.z * w + b.z * u + c.z * v
+                    );
+                    
+                    // Small random offset
+                    const offset = 0.15;
+                    pos.x += (Math.random() - 0.5) * offset;
+                    pos.y += (Math.random() - 0.5) * offset;
+                    pos.z += (Math.random() - 0.5) * offset;
+                    
+                    dots[dotIndex].userData.targetPosition.copy(pos);
+                    dotIndex++;
+                }
+                
+                currentArrangement = 'tetrahedron';
+            }
+            
+            function arrangeSphere() {
+                const radius = 8;
+                
+                dots.forEach((dot, i) => {
+                    const phi = Math.acos(-1 + (2 * i) / dotCount);
+                    const theta = Math.sqrt(dotCount * Math.PI) * phi;
+                    
+                    const x = radius * Math.cos(theta) * Math.sin(phi);
+                    const y = radius * Math.sin(theta) * Math.sin(phi);
+                    const z = radius * Math.cos(phi);
+                    
+                    dot.userData.targetPosition.set(x, y, z);
+                });
+                
+                currentArrangement = 'sphere';
+            }
+            
+            function arrangeRandom() {
+                dots.forEach(dot => {
+                    const radius = 10;
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(2 * Math.random() - 1);
+                    const x = radius * Math.sin(phi) * Math.cos(theta);
+                    const y = radius * Math.Sin(phi) * Math.sin(theta);
+                    const z = radius * Math.cos(phi);
+                    
+                    dot.userData.targetPosition.set(x, y, z);
+                });
+                
+                currentArrangement = 'random';
+            }
+            
+            // Set initial arrangement to perfect sphere
+            arrangeSphere();
+            
+            // Button event listeners
+            document.getElementById('square-btn').addEventListener('click', () => {
+                if (currentArrangement === 'cube') return;
+                arrangeCube();
+                setActiveButton('square-btn');
+            });
+            document.getElementById('triangle-btn').addEventListener('click', () => {
+                if (currentArrangement === 'tetrahedron') return;
+                arrangeTetrahedron();
+                setActiveButton('triangle-btn');
+            });
+            
+            document.getElementById('sphere-btn').addEventListener('click', () => {
+                if (currentArrangement === 'sphere') return;
+                
+                arrangeSphere();
+                setActiveButton('sphere-btn');
+            });
+            
+            function setActiveButton(activeId) {
+                document.querySelectorAll('.btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                document.getElementById(activeId).classList.add('active');
+            }
+            
+            // Animation loop with enhanced effects
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                // Rotate the entire scene 5x faster than original
+                scene.rotation.y += 0.005;
+                
+                // ANIMATION SPEED CONTROL: This is where the transition speed is applied
+                dots.forEach((dot, index) => {
+                    // The lerp function controls the transition speed
+                    // dot.userData.speed is the value that determines how fast each dot moves
+                    // Lower values = slower movement, Higher values = faster movement
+                    dot.position.lerp(dot.userData.targetPosition, dot.userData.speed);
+                    
+                    // Add stronger pulsing effect to emissive intensity
+                    const time = Date.now() * 0.002;
+                    const pulse = Math.sin(time + index * 0.1) * 0.3 + 0.8;
+                    dot.material.emissiveIntensity = pulse;
+                });
+                
+                // Animate center dot with subtle pulsing
+                const time = Date.now() * 0.001;
+                center.material.emissiveIntensity = Math.sin(time * 2) * 0.1 + 0.3;
+                
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+            
+            // Night sky stars effect
+            function drawStars() {
+                const starCanvas = document.getElementById('star-canvas');
+                const ctx = starCanvas.getContext('2d');
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+                starCanvas.width = w;
+                starCanvas.height = h;
+                ctx.clearRect(0, 0, w, h);
+                const starCount = 180;
+                for (let i = 0; i < starCount; i++) {
+                    const x = Math.random() * w;
+                    const y = Math.random() * h;
+                    const r = Math.random() * 1.2 + 0.3;
+                    const glow = Math.random() * 10 + 8;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(x, y, r, 0, 2 * Math.PI);
+                    ctx.shadowColor = '#fffbe6';
+                    ctx.shadowBlur = glow;
+                    ctx.fillStyle = 'rgba(255,255,230,0.85)';
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+            window.addEventListener('resize', drawStars);
+            drawStars();
+            
+            // Start animation
+            animate();
+        });
+    </script>
+</body>
+</html>
